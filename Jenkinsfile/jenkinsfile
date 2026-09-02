@@ -1,0 +1,75 @@
+pipeline {
+    agent any
+
+    environment {
+        // Change 'your-dockerhub-username' to your actual Docker Hub registry username
+        DOCKER_IMAGE = "your-dockerhub-username/mobile-shop:${BUILD_NUMBER}"
+        LATEST_IMAGE = "your-dockerhub-username/mobile-shop:latest"
+        AWS_REGION   = "us-east-1"
+        EKS_CLUSTER  = "mobile-shop-dev-eks"
+    }
+
+    stages {
+        stage('Checkout Source Code') {
+            steps {
+                // Pulls the latest code from your Git repository
+                checkout scm
+            }
+        }
+
+        stage('Build & Test App') {
+            steps {
+                echo 'Building and testing application source code...'
+                // Add test/build commands for your application (e.g., npm test, mvn test)
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    echo "Building Docker Image: ${DOCKER_IMAGE}"
+                    sh "docker build -t ${DOCKER_IMAGE} -t ${LATEST_IMAGE} ."
+                }
+            }
+        }
+
+        stage('Push Docker Image to Registry') {
+            steps {
+                // Securely fetches credentials stored in Jenkins under ID 'docker-hub-credentials'
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin"
+                    sh "docker push ${DOCKER_IMAGE}"
+                    sh "docker push ${LATEST_IMAGE}"
+                }
+            }
+        }
+
+        stage('Run Ansible Setup Tasks') {
+            steps {
+                echo 'Running Ansible tasks to verify control environment...'
+                sh 'ansible-playbook -i ansible/inventory.ini ansible/playbook.yml'
+            }
+        }
+
+        stage('Deploy to Amazon EKS') {
+            steps {
+                // Uses AWS credentials stored in Jenkins under ID 'aws-credentials'
+                withCredentials([aws(credentialsId: 'aws-credentials', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                    sh "aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER}"
+                    sh "kubectl apply -f k8s/deployment.yaml"
+                    sh "kubectl set image deployment/mobile-shop-app mobile-shop-container=${DOCKER_IMAGE}"
+                    sh "kubectl rollout status deployment/mobile-shop-app"
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Deployment completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed. Check stage logs for details.'
+        }
+    }
+}
