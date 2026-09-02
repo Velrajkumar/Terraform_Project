@@ -1,0 +1,36 @@
+---
+- name: Setup Local Environment and Control Tools
+  hosts: localhost
+  connection: local
+  become: false
+
+  tasks:
+    - name: Verify Docker installation
+      command: docker --version
+      register: docker_check
+      ignore_errors: yes
+
+    - name: Print Docker status
+      debug:
+        msg: "{{ docker_check.stdout if docker_check.rc == 0 else 'Docker is not running locally' }}"
+
+    - name: Install kubectl CLI
+      get_url:
+        url: "https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl"
+        dest: /usr/local/bin/kubectl
+        mode: '0755'
+      become: true
+
+    - name: Install AWS CLI (if missing)
+      package:
+        name: awscli
+        state: present
+      become: true
+
+    - name: Verify kubectl installation
+      command: kubectl version --client
+      register: kubectl_check
+
+    - name: Output kubectl version
+      debug:
+        msg: "{{ kubectl_check.stdout }}"
