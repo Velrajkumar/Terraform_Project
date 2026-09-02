@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mobile-shop-app
+  labels:
+    app: mobile-shop
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mobile-shop
+  template:
+    metadata:
+      labels:
+        app: mobile-shop
+    spec:
+      containers:
+      - name: mobile-shop-container
+        # Update this to your target container image registry tag
+        image: your-dockerhub-username/mobile-shop:latest
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mobile-shop-service
+spec:
+  # LoadBalancer automatically provisions an AWS Network/Application Load Balancer
+  type: LoadBalancer
+  selector:
+    app: mobile-shop
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
